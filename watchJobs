@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""
+Poll LeftClaw Services for Frontend QA jobs and dispatch the agent.
+No LLM involved — pure deterministic loop.
+"""
+
+from agent.jobs import JobWatcher
+
+SERVICE_TYPE = 5
+
+
+def build_prompt(job, attempt, resume):
+    job_id = job["id"]
+    client = job.get("client", "unknown")
+
+    if resume:
+        return (
+            f"RESUME: Job #{job_id} on LeftClaw is already assigned to you and IN PROGRESS, "
+            f"but was not completed (previous run may have crashed or timed out). "
+            f"Do NOT call leftclaw_accept_job — the job is already accepted. "
+            f"First fetch your three skill docs with deep_fetch: "
+            f"https://ethskills.com/qa/SKILL.md, "
+            f"https://ethskills.com/frontend-playbook/SKILL.md, "
+            f"https://ethskills.com/frontend-ux/SKILL.md. "
+            f"Then use leftclaw_get_job to read the full description, leftclaw_get_messages to check for client messages. "
+            f"Do Pass 1 (QA checklist, every item PASS/FAIL) then Pass 2 (playbook + UX rules). "
+            f"Write a structured audit report with write_file, "
+            f"upload it with bgipfs_upload, log work with leftclaw_log_work (stage 'qa_audit'), "
+            f"wait 5 seconds, then complete the job with leftclaw_complete_job using the BGIPFS gateway URL."
+        )
+
+    if attempt == 1:
+        return (
+            f"You have a Frontend QA audit job to complete. "
+            f"Job #{job_id} on LeftClaw Services. Client: {client}. "
+            f"First fetch your three skill docs with deep_fetch: "
+            f"https://ethskills.com/qa/SKILL.md, "
+            f"https://ethskills.com/frontend-playbook/SKILL.md, "
+            f"https://ethskills.com/frontend-ux/SKILL.md. "
+            f"Then use leftclaw_get_job to read the full description, leftclaw_get_messages to check for client messages. "
+            f"Do Pass 1 (QA checklist from ethskills — every single item, PASS or FAIL, no skipping) "
+            f"then Pass 2 (check playbook + UX rules for anything the checklist missed). "
+            f"Write a structured audit report to reports/job-{job_id}-qa-audit.md with write_file, "
+            f"upload it with bgipfs_upload, log work with leftclaw_log_work (stage 'qa_audit'), "
+            f"wait 5 seconds, then complete the job with leftclaw_complete_job using the BGIPFS gateway URL."
+        )
+
+    return (
+        f"RETRY: Job #{job_id} on LeftClaw was accepted but not completed on a previous attempt. "
+        f"The job is already accepted — do NOT call leftclaw_accept_job again. "
+        f"Fetch your skill docs first: "
+        f"https://ethskills.com/qa/SKILL.md, "
+        f"https://ethskills.com/frontend-playbook/SKILL.md, "
+        f"https://ethskills.com/frontend-ux/SKILL.md. "
+        f"Use leftclaw_get_job to read the description, do both audit passes (QA checklist + playbook/UX rules), "
+        f"write the report, upload to BGIPFS, log work (stage 'qa_audit'), wait 5 seconds, and complete the job."
+    )
+
+
+if __name__ == "__main__":
+    JobWatcher(
+        service_type_id=SERVICE_TYPE,
+        prompt_builder=build_prompt,
+        poll_interval=60,
+        agent_timeout=900,
+        max_retries=2,
+    ).run()
